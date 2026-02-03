@@ -26,6 +26,14 @@ class BoundaryClarityEvaluator:
         """
         Evaluate boundary clarity using semantic similarity
         
+        According to MoC paper (2503.09600):
+        - Boundary Clarity measures semantic coherence at chunk boundaries
+        - Higher scores indicate clearer boundaries between chunks
+        - Clear boundaries are essential for effective chunking
+        
+        Implementation: Calculate semantic similarity between boundary regions
+        of adjacent chunks. Lower similarity = clearer boundary.
+        
         Args:
             chunks: List of chunks to evaluate
             original_text: Original text from which chunks were extracted

@@ -1,4 +1,4 @@
-"""Boundary Clarity value object from MoC paper"""
+"""Boundary Clarity value object from MoC paper (2503.09600)"""
 from dataclasses import dataclass
 from typing import List
 from ..entities.chunk import Chunk
@@ -7,10 +7,15 @@ from ..entities.chunk import Chunk
 @dataclass(frozen=True)
 class BoundaryClarity:
     """
-    Boundary Clarity metric from MoC paper
+    Boundary Clarity metric from MoC paper (2503.09600)
     
-    Measures semantic coherence at chunk boundaries.
-    Higher scores indicate clearer boundaries between chunks.
+    According to the MoC paper:
+    - Measures semantic coherence at chunk boundaries
+    - Higher scores indicate clearer boundaries between chunks
+    - Essential for effective chunking in RAG systems
+    
+    The actual calculation is implemented in BoundaryClarityEvaluator
+    in the infrastructure layer using semantic similarity.
     """
     
     score: float  # 0.0 to 1.0
@@ -25,6 +30,11 @@ class BoundaryClarity:
         """
         Calculate boundary clarity based on semantic coherence at chunk boundaries
         
+        Note: This is a placeholder implementation. The actual algorithm from
+        the MoC paper is implemented in BoundaryClarityEvaluator in the
+        infrastructure layer, which uses semantic similarity between boundary
+        regions of adjacent chunks.
+        
         Args:
             chunks: List of chunks to evaluate
             original_text: Original text from which chunks were extracted
@@ -36,13 +46,9 @@ class BoundaryClarity:
             # Single chunk or no chunks - perfect boundary clarity
             return cls(score=1.0)
         
-        # TODO: Implement actual algorithm from MoC paper
-        # This should check semantic coherence at boundaries using embeddings
-        # For now, return a placeholder score
-        # The actual implementation will be in the infrastructure layer
-        
         # Placeholder: simple heuristic based on chunk count
-        # More chunks might indicate better boundaries (but this is simplified)
+        # The actual implementation using semantic similarity is in
+        # BoundaryClarityEvaluator in the infrastructure layer
         avg_chunk_length = sum(len(chunk.content) for chunk in chunks) / len(chunks)
         text_length = len(original_text)
         

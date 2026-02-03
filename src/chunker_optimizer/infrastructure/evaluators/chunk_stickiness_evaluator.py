@@ -21,6 +21,14 @@ class ChunkStickinessEvaluator:
         """
         Evaluate chunk stickiness - internal coherence of chunks
         
+        According to MoC paper (2503.09600):
+        - Chunk Stickiness measures how well content within a chunk sticks together
+        - Higher scores indicate better internal coherence
+        - Essential for ensuring chunks are semantically cohesive units
+        
+        Implementation: Measure semantic similarity between different segments
+        within each chunk. Higher similarity = higher stickiness.
+        
         Args:
             chunks: List of chunks to evaluate
         

@@ -50,7 +50,11 @@ class HOPEEvaluator:
         coherence = self._calculate_coherence(chunks, original_document)
         
         # Overall score: weighted average
-        # Extrinsic is most important (56.2% impact according to HOPE paper)
+        # According to HOPE paper (2505.02171):
+        # - Extrinsic (semantic independence) is most critical: 56.2% impact
+        # - Intrinsic (internal unity) has minimal impact
+        # - Coherence is moderately important
+        # Weight distribution: Intrinsic 0.2, Extrinsic 0.5, Coherence 0.3
         overall = (intrinsic * 0.2 + extrinsic * 0.5 + coherence * 0.3)
         
         return HOPEMetrics(
@@ -64,7 +68,13 @@ class HOPEEvaluator:
         """
         Calculate intrinsic passage properties
         
-        Measures internal properties of each passage (coherence, completeness)
+        According to HOPE paper (2505.02171):
+        - "traditional assumptions about maintaining concept unity within passages show minimal impact"
+        - Intrinsic properties measure internal coherence and completeness of passages
+        - However, the paper suggests this has minimal impact compared to extrinsic properties
+        
+        Implementation: Measure internal coherence by analyzing semantic consistency
+        across different parts of each passage using multiple segments.
         """
         if not chunks:
             return 0.0
@@ -74,26 +84,49 @@ class HOPEEvaluator:
             self.embedding_model.encode(chunk.content) for chunk in chunks
         ]
         
-        # For each chunk, measure internal coherence
+        # For each chunk, measure internal coherence using multiple segments
         intrinsic_scores = []
         for chunk, embedding in zip(chunks, chunk_embeddings):
-            # Split chunk into parts and measure similarity
-            if len(chunk.content) > 20:
-                parts = [
-                    chunk.content[:len(chunk.content) // 2],
-                    chunk.content[len(chunk.content) // 2:]
-                ]
-                part_embeddings = [
-                    self.embedding_model.encode(part) for part in parts
-                ]
-                similarity = self._cosine_similarity(
-                    part_embeddings[0],
-                    part_embeddings[1]
-                )
-                intrinsic_scores.append(similarity)
-            else:
-                # Short chunks are considered coherent
+            if len(chunk.content) < 20:
+                # Very short chunks are considered coherent
                 intrinsic_scores.append(1.0)
+                continue
+            
+            # Split chunk into multiple segments (3-5 segments for better analysis)
+            num_segments = min(5, max(3, len(chunk.content) // 100))
+            segment_length = len(chunk.content) // num_segments
+            
+            segments = []
+            for i in range(num_segments):
+                start = i * segment_length
+                end = (i + 1) * segment_length if i < num_segments - 1 else len(chunk.content)
+                segment_text = chunk.content[start:end].strip()
+                if segment_text:
+                    segments.append(segment_text)
+            
+            if len(segments) < 2:
+                intrinsic_scores.append(1.0)
+                continue
+            
+            # Get embeddings for all segments
+            segment_embeddings = [
+                self.embedding_model.encode(segment) for segment in segments
+            ]
+            
+            # Calculate pairwise similarities between segments
+            similarities = []
+            for i in range(len(segment_embeddings)):
+                for j in range(i + 1, len(segment_embeddings)):
+                    similarity = self._cosine_similarity(
+                        segment_embeddings[i],
+                        segment_embeddings[j]
+                    )
+                    similarities.append(similarity)
+            
+            # Average similarity represents internal coherence
+            # Higher similarity = more coherent passage
+            avg_similarity = np.mean(similarities) if similarities else 0.0
+            intrinsic_scores.append(float(avg_similarity))
         
         return float(np.mean(intrinsic_scores)) if intrinsic_scores else 0.0
     
@@ -101,8 +134,13 @@ class HOPEEvaluator:
         """
         Calculate extrinsic passage properties (semantic independence)
         
-        This is critical - semantic independence between passages is essential
-        (up to 56.2% impact on factual correctness according to HOPE paper)
+        According to HOPE paper (2505.02171):
+        - "Semantic independence between passages proves essential"
+        - "up to 56.2% impact on factual correctness"
+        - This is the most critical factor for RAG performance
+        
+        Implementation: Calculate pairwise semantic similarity between chunks.
+        Lower average similarity = higher independence = better extrinsic score.
         """
         if len(chunks) < 2:
             return 1.0  # Single chunk is perfectly independent
@@ -137,7 +175,13 @@ class HOPEEvaluator:
         """
         Calculate passages-document coherence
         
-        Measures how well chunks maintain coherence with the original document
+        According to HOPE paper (2505.02171):
+        - Measures how well chunks maintain coherence with the original document
+        - Ensures chunks preserve the overall context and theme
+        - Important for maintaining document-level understanding
+        
+        Implementation: Calculate semantic similarity between each chunk and
+        the full document. Higher similarity = higher coherence.
         """
         if not chunks or not document:
             return 0.0

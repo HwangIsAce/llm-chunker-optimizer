@@ -70,3 +70,7 @@ tests/fixtures/real_data/*.json
 
 # Data
 docs/
+
+# Results
+results/
+!results/.gitkeep

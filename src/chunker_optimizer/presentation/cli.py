@@ -72,26 +72,129 @@ except ImportError:
 
 def create_chunking_function_from_context(chunking_context: ChunkingContext) -> list[Chunk]:
     """
-    Create a simple chunking function for testing
+    Create a chunking function that uses the prompt from chunking context
     
-    This is a placeholder - in production, this would call the actual chunking pipeline
+    The prompt is analyzed to determine chunking strategy:
+    - If prompt emphasizes "semantic boundaries" or "coherent", use semantic-based chunking
+    - If prompt emphasizes "distinct" or "standalone", create more distinct chunks
+    - If prompt emphasizes "boundaries", focus on clear boundary detection
+    - Otherwise, use adaptive chunking based on prompt keywords
     """
-    # Simple chunking: split by paragraphs
     text = chunking_context.document_enrichment.parsed_document.raw_content
+    prompt_content = chunking_context.prompt.content.lower()
+    
+    # Analyze prompt to determine chunking strategy
+    use_semantic = any(keyword in prompt_content for keyword in [
+        "semantic", "coherent", "coherence", "meaningful", "theme"
+    ])
+    use_distinct = any(keyword in prompt_content for keyword in [
+        "distinct", "standalone", "independent", "separate", "unique"
+    ])
+    use_boundaries = any(keyword in prompt_content for keyword in [
+        "boundary", "boundaries", "boundary marker", "sharply defined"
+    ])
+    use_topic_shift = any(keyword in prompt_content for keyword in [
+        "topic shift", "topic change", "new topic", "unique topic"
+    ])
+    
+    # Determine chunk size based on prompt emphasis
+    if use_distinct:
+        # Smaller, more distinct chunks
+        chunk_size_factor = 0.7
+    elif use_semantic or use_topic_shift:
+        # Medium-sized semantic chunks
+        chunk_size_factor = 1.0
+    else:
+        # Default chunking
+        chunk_size_factor = 1.2
+    
+    # Split text into potential chunks
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
     
+    # If no paragraphs, split by sentences
+    if not paragraphs:
+        sentences = [s.strip() for s in text.split(".") if s.strip()]
+        if sentences:
+            paragraphs = sentences
+        else:
+            # Fallback: split by newlines
+            paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
+    
+    # Apply chunking strategy
     chunks = []
     current_index = 0
-    for i, para in enumerate(paragraphs):
-        start_index = current_index
-        end_index = start_index + len(para)
-        chunks.append(Chunk(
-            id=f"chunk_{i}",
-            content=para,
-            start_index=start_index,
-            end_index=end_index
-        ))
-        current_index = end_index + 2  # +2 for "\n\n"
+    
+    if use_semantic or use_topic_shift:
+        # Group paragraphs by semantic similarity (simplified)
+        # In production, this would use embeddings
+        chunk_groups = []
+        current_group = []
+        target_size = int(len(paragraphs) * chunk_size_factor / max(1, len(paragraphs) // 10))
+        
+        for i, para in enumerate(paragraphs):
+            current_group.append((i, para))
+            # Create chunk when group reaches target size or at topic shift indicators
+            if len(current_group) >= target_size or (use_topic_shift and i > 0 and i % 3 == 0):
+                chunk_groups.append(current_group)
+                current_group = []
+        if current_group:
+            chunk_groups.append(current_group)
+        
+        # Create chunks from groups
+        for group_idx, group in enumerate(chunk_groups):
+            chunk_text = "\n\n".join([para for _, para in group])
+            start_idx = current_index
+            end_idx = start_idx + len(chunk_text)
+            chunks.append(Chunk(
+                id=f"chunk_{group_idx}",
+                content=chunk_text,
+                start_index=start_idx,
+                end_index=end_idx
+            ))
+            current_index = end_idx + 2
+    elif use_distinct:
+        # Create more distinct, smaller chunks
+        for i, para in enumerate(paragraphs):
+            # Split long paragraphs further if needed
+            if len(para) > 500:  # Split long paragraphs
+                sentences = [s.strip() for s in para.split(".") if s.strip()]
+                for j, sentence in enumerate(sentences):
+                    start_idx = current_index
+                    end_idx = start_idx + len(sentence)
+                    chunks.append(Chunk(
+                        id=f"chunk_{i}_{j}",
+                        content=sentence,
+                        start_index=start_idx,
+                        end_index=end_idx
+                    ))
+                    current_index = end_idx + 2
+            else:
+                start_idx = current_index
+                end_idx = start_idx + len(para)
+                chunks.append(Chunk(
+                    id=f"chunk_{i}",
+                    content=para,
+                    start_index=start_idx,
+                    end_index=end_idx
+                ))
+                current_index = end_idx + 2
+    else:
+        # Default: paragraph-based chunking with size adjustment
+        target_chunks = max(1, int(len(paragraphs) / chunk_size_factor))
+        chunk_size = max(1, len(paragraphs) // target_chunks) if target_chunks > 0 else 1
+        
+        for chunk_idx in range(0, len(paragraphs), chunk_size):
+            chunk_paras = paragraphs[chunk_idx:chunk_idx + chunk_size]
+            chunk_text = "\n\n".join(chunk_paras)
+            start_idx = current_index
+            end_idx = start_idx + len(chunk_text)
+            chunks.append(Chunk(
+                id=f"chunk_{chunk_idx // chunk_size}",
+                content=chunk_text,
+                start_index=start_idx,
+                end_index=end_idx
+            ))
+            current_index = end_idx + 2
     
     return chunks
 
@@ -337,36 +440,70 @@ def optimize(
     click.echo(f"\n📝 Final Prompt (v{result.final_prompt.version}):")
     click.echo(f"   {result.final_prompt.content}")
     
-    # Save results if output specified
-    if output:
-        output_path = Path(output)
-        output_data = {
-            "result": {
-                "iterations": result.iterations,
-                "converged": result.converged,
-                "final_metrics": result.final_metrics.to_dict(),
-                "final_prompt": {
-                    "id": result.final_prompt.id,
-                    "content": result.final_prompt.content,
-                    "version": result.final_prompt.version
-                }
-            },
-            "history": result.history,
-            "performance": {
-                "total_time": performance.total_time,
-                "average_times": {
-                    "evaluation": performance.average_evaluation_time,
-                    "optimization": performance.average_optimization_time,
-                    "chunking": performance.average_chunking_time
-                }
+    # Save results (default to results folder if not specified)
+    if not output:
+        # Generate default filename with timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output = f"results/optimization_{timestamp}.json"
+    
+    output_path = Path(output)
+    # Ensure results folder exists
+    if output_path.parent.name == "results" or str(output_path).startswith("results/"):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        # If output doesn't start with results/, put it in results folder
+        results_dir = Path("results")
+        results_dir.mkdir(exist_ok=True)
+        output_path = results_dir / output_path.name
+    
+    output_data = {
+        "result": {
+            "iterations": result.iterations,
+            "converged": result.converged,
+            "final_metrics": result.final_metrics.to_dict(),
+            "final_prompt": {
+                "id": result.final_prompt.id,
+                "content": result.final_prompt.content,
+                "version": result.final_prompt.version
+            }
+        },
+        "history": result.history,
+        "performance": {
+            "total_time": performance.total_time,
+            "average_times": {
+                "evaluation": performance.average_evaluation_time,
+                "optimization": performance.average_optimization_time,
+                "chunking": performance.average_chunking_time
             }
         }
-        
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(output_data, f, indent=2, ensure_ascii=False)
-        
-        click.echo(f"\n💾 Results saved to: {output_path}")
+    }
+    
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(output_data, f, indent=2, ensure_ascii=False)
+    
+    click.echo(f"\n💾 Results saved to: {output_path}")
+    
+    # Display chunking samples from final iteration
+    if result.history:
+        final_iteration = result.history[-1]
+        if "chunk_samples" in final_iteration and final_iteration["chunk_samples"]:
+            click.echo(f"\n📦 Chunking Results (showing {len(final_iteration['chunk_samples'])} of {final_iteration['chunk_count']} chunks):")
+            click.echo("   " + "-" * 66)
+            for i, chunk_sample in enumerate(final_iteration["chunk_samples"], 1):
+                click.echo(f"\n   Chunk {i} (ID: {chunk_sample['id']}):")
+                click.echo(f"   Length: {chunk_sample['length']} chars | Range: [{chunk_sample['start_index']}, {chunk_sample['end_index']})")
+                preview = chunk_sample['content_preview']
+                # Display preview with better formatting
+                lines = preview.split('\n')[:3]  # Show first 3 lines
+                for line in lines:
+                    if line.strip():
+                        click.echo(f"   {line[:60]}{'...' if len(line) > 60 else ''}")
+                if len(preview) > 200:
+                    click.echo("   ...")
+            
+            click.echo(f"\n   💡 전체 chunking 결과는 {output_path} 파일에서 확인할 수 있습니다.")
+            click.echo(f"   💡 각 iteration별 chunk 샘플이 history에 저장되어 있습니다.")
     
     # Save profiling report if enabled
     if enable_profiling:

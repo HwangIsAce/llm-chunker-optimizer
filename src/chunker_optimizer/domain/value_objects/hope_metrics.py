@@ -1,4 +1,4 @@
-"""HOPE (Holistic Passage Evaluation) metrics value object"""
+"""HOPE (Holistic Passage Evaluation) metrics value object from HOPE paper (2505.02171)"""
 from dataclasses import dataclass
 from typing import List, Dict
 from ..entities.chunk import Chunk
@@ -7,12 +7,18 @@ from ..entities.chunk import Chunk
 @dataclass(frozen=True)
 class HOPEMetrics:
     """
-    HOPE (Holistic Passage Evaluation) metrics
+    HOPE (Holistic Passage Evaluation) metrics from HOPE paper (2505.02171)
     
-    Based on the HOPE paper, evaluates chunks at three levels:
-    - Intrinsic: Internal properties of passages
+    According to the HOPE paper:
+    - Intrinsic: Internal properties of passages (coherence, completeness)
+      Note: Paper states "minimal impact" compared to extrinsic properties
     - Extrinsic: Relationships between passages (semantic independence)
+      Critical: "up to 56.2% impact on factual correctness"
     - Coherence: Passages-document coherence
+      Ensures chunks maintain context with original document
+    
+    The actual calculation is implemented in HOPEEvaluator in the
+    infrastructure layer using semantic similarity.
     """
     
     intrinsic_score: float
@@ -34,7 +40,11 @@ class HOPEMetrics:
         original_document: str
     ) -> "HOPEMetrics":
         """
-        Calculate HOPE metrics based on the paper
+        Calculate HOPE metrics based on the HOPE paper (2505.02171)
+        
+        Note: This is a placeholder implementation. The actual algorithms from
+        the HOPE paper are implemented in HOPEEvaluator in the infrastructure
+        layer, which uses semantic similarity for all three components.
         
         Args:
             chunks: List of chunks to evaluate
@@ -51,9 +61,9 @@ class HOPEMetrics:
                 overall_score=0.0
             )
         
-        # TODO: Implement actual algorithms from HOPE paper
-        # The actual implementation will be in the infrastructure layer
-        # These are placeholder calculations
+        # Placeholder calculations
+        # The actual implementation using semantic similarity is in
+        # HOPEEvaluator in the infrastructure layer
         
         intrinsic = cls._calculate_intrinsic(chunks)
         extrinsic = cls._calculate_extrinsic(chunks)
@@ -75,8 +85,9 @@ class HOPEMetrics:
         """
         Calculate intrinsic passage properties
         
-        This measures internal properties of each passage.
-        TODO: Implement actual algorithm from HOPE paper
+        According to HOPE paper: "minimal impact" compared to extrinsic.
+        The actual implementation is in HOPEEvaluator using semantic similarity
+        between multiple segments within each passage.
         """
         if not chunks:
             return 0.0
@@ -96,10 +107,13 @@ class HOPEMetrics:
         """
         Calculate extrinsic passage properties (semantic independence)
         
-        This is critical - semantic independence between passages is essential
-        (up to 56.2% impact on factual correctness according to HOPE paper)
+        According to HOPE paper (2505.02171):
+        - "Semantic independence between passages proves essential"
+        - "up to 56.2% impact on factual correctness"
+        - This is the most critical factor for RAG performance
         
-        TODO: Implement actual algorithm from HOPE paper
+        The actual implementation is in HOPEEvaluator using pairwise semantic
+        similarity between chunks (lower similarity = higher independence).
         """
         if len(chunks) < 2:
             return 1.0  # Single chunk is perfectly independent
@@ -120,8 +134,9 @@ class HOPEMetrics:
         """
         Calculate passages-document coherence
         
-        Measures how well chunks maintain coherence with the original document.
-        TODO: Implement actual algorithm from HOPE paper
+        According to HOPE paper: Measures how well chunks maintain coherence
+        with the original document. The actual implementation is in HOPEEvaluator
+        using semantic similarity between each chunk and the full document.
         """
         if not chunks or not document:
             return 0.0

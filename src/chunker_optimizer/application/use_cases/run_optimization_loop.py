@@ -129,13 +129,25 @@ class RunOptimizationLoopUseCase:
             else:
                 metrics = self.evaluate_use_case.execute(chunks, original_text)
             
-            # Record history
+            # Record history with chunk samples
+            chunk_samples = []
+            for i, chunk in enumerate(chunks[:5]):  # Store first 5 chunks as samples
+                chunk_samples.append({
+                    "id": chunk.id,
+                    "content_preview": chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content,
+                    "length": len(chunk.content),
+                    "start_index": chunk.start_index,
+                    "end_index": chunk.end_index
+                })
+            
             history.append({
                 "iteration": iteration,
                 "prompt_version": current_prompt.version,
                 "prompt_content": current_prompt.content,
                 "metrics": metrics.to_dict(),
                 "chunk_count": len(chunks),
+                "chunk_samples": chunk_samples,
+                "total_chunks": len(chunks),
                 "used_vlm": chunking_context.document_enrichment.has_vlm_output(),
                 "used_llm_summary": chunking_context.document_enrichment.has_llm_summary()
             })

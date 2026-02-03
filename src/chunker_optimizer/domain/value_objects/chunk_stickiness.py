@@ -1,4 +1,4 @@
-"""Chunk Stickiness value object from MoC paper"""
+"""Chunk Stickiness value object from MoC paper (2503.09600)"""
 from dataclasses import dataclass
 from typing import List
 from ..entities.chunk import Chunk
@@ -7,10 +7,15 @@ from ..entities.chunk import Chunk
 @dataclass(frozen=True)
 class ChunkStickiness:
     """
-    Chunk Stickiness metric from MoC paper
+    Chunk Stickiness metric from MoC paper (2503.09600)
     
-    Measures how well content within each chunk sticks together semantically.
-    Higher scores indicate better internal coherence within chunks.
+    According to the MoC paper:
+    - Measures how well content within each chunk sticks together semantically
+    - Higher scores indicate better internal coherence within chunks
+    - Essential for ensuring chunks are semantically cohesive units
+    
+    The actual calculation is implemented in ChunkStickinessEvaluator
+    in the infrastructure layer using semantic similarity between segments.
     """
     
     score: float  # 0.0 to 1.0
@@ -25,6 +30,11 @@ class ChunkStickiness:
         """
         Calculate chunk stickiness - how well content within each chunk sticks together
         
+        Note: This is a placeholder implementation. The actual algorithm from
+        the MoC paper is implemented in ChunkStickinessEvaluator in the
+        infrastructure layer, which uses semantic similarity between segments
+        within each chunk.
+        
         Args:
             chunks: List of chunks to evaluate
         
@@ -34,10 +44,9 @@ class ChunkStickiness:
         if not chunks:
             return cls(score=0.0)
         
-        # TODO: Implement actual algorithm from MoC paper
-        # This should check semantic coherence within each chunk using embeddings
-        # For now, return a placeholder score
-        # The actual implementation will be in the infrastructure layer
+        # Placeholder: simple heuristic
+        # The actual implementation using semantic similarity is in
+        # ChunkStickinessEvaluator in the infrastructure layer
         
         # Placeholder: simple heuristic based on chunk content
         # Longer chunks might have better internal coherence (but this is simplified)
