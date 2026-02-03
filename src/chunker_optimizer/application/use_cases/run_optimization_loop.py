@@ -133,6 +133,7 @@ class RunOptimizationLoopUseCase:
             history.append({
                 "iteration": iteration,
                 "prompt_version": current_prompt.version,
+                "prompt_content": current_prompt.content,
                 "metrics": metrics.to_dict(),
                 "chunk_count": len(chunks),
                 "used_vlm": chunking_context.document_enrichment.has_vlm_output(),

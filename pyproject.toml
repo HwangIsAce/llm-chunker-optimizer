@@ -26,6 +26,10 @@ dev = [
     "mypy>=1.0.0",
     "ruff>=0.1.0",
 ]
+peter-parser = [
+    "peter-parser-core",
+    "peter-parser",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -33,6 +37,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/chunker_optimizer"]
+
+[tool.uv.sources]
+peter-parser-core = { path = "../../pipelines/parsing-pipeline/peter-parser-core" }
+peter-parser = { path = "../../pipelines/parsing-pipeline/peter-parser" }
 
 [tool.black]
 line-length = 100

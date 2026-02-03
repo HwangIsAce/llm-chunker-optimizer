@@ -25,6 +25,17 @@ try:
         VLMOutput,
         LLMSummary
     )
+    # Try to import peter-parser adapter
+    try:
+        from chunker_optimizer.infrastructure.adapters.peter_parser_adapter import (
+            PeterParserAdapter,
+            create_peter_parser_chunking_function
+        )
+        PETER_PARSER_AVAILABLE = True
+    except ImportError:
+        PETER_PARSER_AVAILABLE = False
+        PeterParserAdapter = None
+        create_peter_parser_chunking_function = None
 except ImportError:
     # Fallback to relative imports (for package structure)
     from ...domain.entities.prompt import Prompt
@@ -46,6 +57,17 @@ except ImportError:
         VLMOutput,
         LLMSummary
     )
+    # Try to import peter-parser adapter
+    try:
+        from ...infrastructure.adapters.peter_parser_adapter import (
+            PeterParserAdapter,
+            create_peter_parser_chunking_function
+        )
+        PETER_PARSER_AVAILABLE = True
+    except ImportError:
+        PETER_PARSER_AVAILABLE = False
+        PeterParserAdapter = None
+        create_peter_parser_chunking_function = None
 
 
 def create_chunking_function_from_context(chunking_context: ChunkingContext) -> list[Chunk]:
@@ -163,6 +185,8 @@ def cli():
 @click.option("--max-iterations", default=10, type=int, help="Maximum iterations")
 @click.option("--use-real-data", is_flag=True, help="Use real enrichment data from JSON")
 @click.option("--real-data-file", help="Specific real data JSON file to use")
+@click.option("--use-peter-parser", is_flag=True, help="Use peter-parser for actual chunking")
+@click.option("--document-type", type=click.Choice(["heading", "plain", "slide", "lifelog"]), help="Document type for peter-parser (4-case routing)")
 @click.option("--output", help="Output file path for results (JSON format)")
 @click.option("--enable-profiling", is_flag=True, help="Enable performance profiling")
 def optimize(
@@ -173,6 +197,8 @@ def optimize(
     max_iterations: int,
     use_real_data: bool,
     real_data_file: Optional[str],
+    use_peter_parser: bool,
+    document_type: Optional[str],
     output: Optional[str],
     enable_profiling: bool
 ):
@@ -219,7 +245,10 @@ def optimize(
     except Exception as e:
         click.echo(f"⚠️  LLM client not available: {e}", err=True)
         click.echo("⚠️  Using mock LLM client for testing", err=True)
-        from ...infrastructure.llm.llm_client import LLMClient
+        try:
+            from chunker_optimizer.infrastructure.llm.llm_client import LLMClient
+        except ImportError:
+            from ...infrastructure.llm.llm_client import LLMClient
         
         class MockLLMClient(LLMClient):
             def optimize_prompt(self, current_prompt: str, optimization_instruction: str) -> str:
@@ -235,7 +264,25 @@ def optimize(
         profiler.start()
     
     # Create chunking function
-    chunking_function = create_chunking_function_from_context
+    if use_peter_parser:
+        if not PETER_PARSER_AVAILABLE:
+            click.echo("❌ peter-parser is not available. Falling back to mock chunking.", err=True)
+            chunking_function = create_chunking_function_from_context
+        else:
+            click.echo("🔧 Using peter-parser for chunking...")
+            try:
+                chunking_function = create_peter_parser_chunking_function(
+                    chunk_unit=chunk_unit,
+                    document_type=document_type,
+                    prompt_content=initial_prompt
+                )
+                click.echo("✅ peter-parser chunking function created")
+            except Exception as e:
+                click.echo(f"⚠️  Failed to create peter-parser chunking function: {e}", err=True)
+                click.echo("⚠️  Falling back to mock chunking", err=True)
+                chunking_function = create_chunking_function_from_context
+    else:
+        chunking_function = create_chunking_function_from_context
     
     # Create optimization use case
     use_case = RunOptimizationLoopUseCase(
@@ -256,6 +303,9 @@ def optimize(
     click.echo(f"   - Threshold: {threshold}")
     click.echo(f"   - Chunk unit: {chunk_unit}")
     click.echo(f"   - Using real data: {use_real_data}")
+    click.echo(f"   - Using peter-parser: {use_peter_parser and PETER_PARSER_AVAILABLE}")
+    if document_type:
+        click.echo(f"   - Document type: {document_type}")
     click.echo("\n🔄 Running optimization loop...\n")
     
     result = use_case.execute(prompt, context, config)

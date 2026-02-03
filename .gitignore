@@ -37,9 +37,7 @@ dmypy.json
 
 # Performance profiling
 *.prof
-*.pstats
-
-# OS
+*.pstats# OS
 .DS_Store
 Thumbs.db
 
@@ -69,3 +67,6 @@ dmypy.json
 # Project specific
 tests/fixtures/real_data/*.json
 !tests/fixtures/real_data/.gitkeep
+
+# Data
+docs/
