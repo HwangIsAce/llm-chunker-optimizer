@@ -5,6 +5,7 @@ from ...domain.entities.chunk import Chunk
 from ...domain.entities.prompt import Prompt
 from ...domain.entities.chunking_context import ChunkingContext
 from ...domain.entities.evaluation_metrics import EvaluationMetrics
+from ...infrastructure.performance.metrics_collector import PerformanceMetricsCollector
 from .evaluate_chunks import EvaluateChunksUseCase
 from .optimize_prompt import OptimizePromptUseCase
 
@@ -56,6 +57,7 @@ class RunOptimizationLoopUseCase:
         evaluate_use_case: EvaluateChunksUseCase,
         optimize_use_case: OptimizePromptUseCase,
         chunking_function: Callable[[ChunkingContext], List[Chunk]],
+        metrics_collector: Optional[PerformanceMetricsCollector] = None,
     ):
         """
         Initialize use case
@@ -64,10 +66,12 @@ class RunOptimizationLoopUseCase:
             evaluate_use_case: Use case for evaluating chunks
             optimize_use_case: Use case for optimizing prompts
             chunking_function: Function that takes ChunkingContext and returns chunks
+            metrics_collector: Optional performance metrics collector
         """
         self.evaluate_use_case = evaluate_use_case
         self.optimize_use_case = optimize_use_case
         self.chunking_function = chunking_function
+        self.metrics_collector = metrics_collector
     
     def execute(
         self,
@@ -94,6 +98,10 @@ class RunOptimizationLoopUseCase:
         # Get original text from document enrichment
         original_text = chunking_context.document_enrichment.parsed_document.raw_content
         
+        # Reset metrics collector if provided
+        if self.metrics_collector:
+            self.metrics_collector.reset()
+        
         for iteration in range(config.max_iterations):
             # Update context with current prompt
             current_context = ChunkingContext(
@@ -104,10 +112,22 @@ class RunOptimizationLoopUseCase:
             )
             
             # Generate chunks with current prompt and context
-            chunks = self.chunking_function(current_context)
+            chunking_time = 0.0
+            if self.metrics_collector:
+                with self.metrics_collector.time_operation("chunking"):
+                    chunks = self.chunking_function(current_context)
+                chunking_time = self.metrics_collector.timers.get("chunking", 0.0)
+            else:
+                chunks = self.chunking_function(current_context)
             
             # Evaluate chunks
-            metrics = self.evaluate_use_case.execute(chunks, original_text)
+            evaluation_time = 0.0
+            if self.metrics_collector:
+                with self.metrics_collector.time_operation("evaluation"):
+                    metrics = self.evaluate_use_case.execute(chunks, original_text)
+                evaluation_time = self.metrics_collector.timers.get("evaluation", 0.0)
+            else:
+                metrics = self.evaluate_use_case.execute(chunks, original_text)
             
             # Record history
             history.append({
@@ -147,12 +167,39 @@ class RunOptimizationLoopUseCase:
                 )
             
             # Optimize prompt for next iteration
+            optimization_time = 0.0
+            llm_call_time = 0.0
+            token_count = 0
+            
             if iteration < config.max_iterations - 1:
-                current_prompt = self.optimize_use_case.execute(
-                    current_prompt,
-                    metrics,
-                    chunks,
-                    iteration
+                if self.metrics_collector:
+                    with self.metrics_collector.time_operation("optimization"):
+                        current_prompt = self.optimize_use_case.execute(
+                            current_prompt,
+                            metrics,
+                            chunks,
+                            iteration
+                        )
+                    optimization_time = self.metrics_collector.timers.get("optimization", 0.0)
+                    # LLM call time is part of optimization
+                    llm_call_time = optimization_time  # Simplified - could be more granular
+                else:
+                    current_prompt = self.optimize_use_case.execute(
+                        current_prompt,
+                        metrics,
+                        chunks,
+                        iteration
+                    )
+            
+            # Record performance metrics
+            if self.metrics_collector:
+                self.metrics_collector.record_metrics(
+                    iteration=iteration,
+                    evaluation_time=evaluation_time,
+                    optimization_time=optimization_time,
+                    chunking_time=chunking_time,
+                    llm_call_time=llm_call_time,
+                    token_count=token_count
                 )
         
         # Max iterations reached
